@@ -98,6 +98,69 @@ local function ApplyCVars(saved)
 end
 
 -------------------------------------------------------------------------------
+-- /cm findsetting: snapshot every CVar, let the player flip a setting in the
+-- game menu, then diff and start tracking whatever changed.
+-------------------------------------------------------------------------------
+-- Things that change on their own and should never be tracked.
+local FIND_IGNORE = {
+	"^camera", "^Camera", "^Gamepad?CameraSaved", "^gx", "^Gx", "^lastCharacterIndex$", "^gameTip$",
+	"^hardTrackedQuests", "^trackedQuests", "^lastAddonVersion", "^EJ", "^playerStat", "^closedInfoFrames",
+	"^lastTransmog", "^lastVoidStorage", "^minimapTracking", "^Sound_", "^showTutorials$",
+}
+local findSnapshot
+
+local function SnapshotAllCVars()
+	if not (C_Console and C_Console.GetAllCommands) then return nil end
+	local cvarType = Enum.ConsoleCommandType and Enum.ConsoleCommandType.Cvar or 0
+	local out = {}
+	for _, info in ipairs(C_Console.GetAllCommands()) do
+		if info.commandType == cvarType and info.command then
+			local value = C_CVar.GetCVar(info.command)
+			if value ~= nil then out[info.command] = value end
+		end
+	end
+	return out
+end
+
+local function IsIgnored(name)
+	for _, pattern in ipairs(FIND_IGNORE) do
+		if name:find(pattern) then return true end
+	end
+	return false
+end
+
+local function FindSetting()
+	if not findSnapshot then
+		findSnapshot = SnapshotAllCVars()
+		if not findSnapshot then
+			Print("This game client can't list its settings, sorry. Use /cm cvar add <name> instead.")
+			return
+		end
+		Print("Step 1 done. Now flip the setting you want remembered per setup (e.g. the controller UI checkbox),")
+		Print("click Okay/Apply and close the settings window, then type |cffffffff/cm findsetting|r again.")
+		return
+	end
+
+	local after = SnapshotAllCVars()
+	local found = 0
+	for name, value in pairs(after) do
+		local before = findSnapshot[name]
+		if before ~= nil and before ~= value and not IsIgnored(name) then
+			found = found + 1
+			local new = not tContains(db.cvars, name)
+			if new then tinsert(db.cvars, name) end
+			Print(("%s %s (%s -> %s)"):format(new and "Now remembering" or "Already remembering", name, before, value))
+		end
+	end
+	findSnapshot = nil
+	if found == 0 then
+		Print("No setting changed. It may not have been applied yet (click Okay/Apply), or it's stored by an addon.")
+	else
+		Print("Done. Each setup will remember its own value from the next time you switch away from it.")
+	end
+end
+
+-------------------------------------------------------------------------------
 -- Display (monitor, display mode, window size)
 -- Saved once per setup and only updated with /cm savedisplay, so a resolution
 -- Parsec changed on connect never gets recorded as your Desk display.
@@ -189,12 +252,17 @@ end
 -------------------------------------------------------------------------------
 -- Addon enable/disable state (per character)
 -------------------------------------------------------------------------------
+-- GetAddOnEnableState's argument order differs between game clients (name-first
+-- on Retail, character-first on older ones), and the wrong order silently reports
+-- everything as enabled. GetAddOnInfo's "reason" is the same everywhere: it's
+-- "DISABLED" when the addon is switched off for this character, and it updates
+-- as soon as you untick it, before any reload.
 local function CaptureAddons()
-	local out, me = {}, PlayerName()
+	local out = {}
 	for i = 1, C_AddOns.GetNumAddOns() do
-		local name = C_AddOns.GetAddOnInfo(i)
+		local name, _, _, _, reason = C_AddOns.GetAddOnInfo(i)
 		if name and name ~= ADDON then
-			out[name] = (C_AddOns.GetAddOnEnableState(name, me) or 0) > 0
+			out[name] = reason ~= "DISABLED"
 		end
 	end
 	return out
@@ -209,6 +277,16 @@ local function ApplyAddons(saved)
 		if name ~= ADDON and current[name] ~= nil and current[name] ~= enabled then
 			if enabled then C_AddOns.EnableAddOn(name, me) else C_AddOns.DisableAddOn(name, me) end
 			changed = true
+		end
+	end
+	if changed then
+		-- Check it took, so a failure is visible instead of silent.
+		local after, failed = CaptureAddons(), {}
+		for name, enabled in pairs(saved) do
+			if after[name] ~= nil and after[name] ~= enabled then failed[#failed + 1] = name end
+		end
+		if #failed > 0 then
+			Print("|cffff6060Couldn't switch these addons on/off:|r " .. table.concat(failed, ", "))
 		end
 	end
 	return changed
@@ -424,6 +502,13 @@ local function InitDB()
 	char = CouchModeCharDB
 	char.layouts = char.layouts or {}
 	char.addons = char.addons or {}
+	if char.addonsFormat ~= 2 then
+		-- Lists saved by 1.0.x on WoW Forever wrongly recorded every addon as
+		-- enabled; applying them would switch on addons you'd turned off. Drop them
+		-- and they'll be recorded correctly on the next switch.
+		wipe(char.addons)
+		char.addonsFormat = 2
+	end
 	char.sv = char.sv or {}
 	for mode in pairs(MODES) do char.sv[mode] = char.sv[mode] or {} end
 	char.svOwner = char.svOwner or {}
@@ -495,6 +580,8 @@ local HELP = {
 	"/cm  - switch between Desk and Handheld (same as the button)",
 	"/cm desk | handheld  - switch to that setup",
 	"/cm status  - show the current setup",
+	"/cm addons  - list which addons this setup has turned off",
+	"/cm findsetting  - run, flip a game setting, run again: that setting is then remembered per setup",
 	"/cm savedisplay  - save the current display mode/resolution for this setup",
 	"/cm relabel desk | handheld  - say what your CURRENT setup is, without changing anything",
 	"/cm track <Addon> <SavedVar ...>  - also swap that addon's account-wide settings",
@@ -519,6 +606,16 @@ SlashCmdList.COUCHMODE = function(msg)
 	elseif cmd == "status" then
 		Print("Current setup: " .. MODES[db.mode] .. ". " .. MODES[Other(db.mode)] ..
 			(db.profiles[Other(db.mode)].saved and " is saved." or " hasn't been set up yet."))
+	elseif cmd == "addons" then
+		local off = {}
+		for name, enabled in pairs(CaptureAddons()) do
+			if not enabled then off[#off + 1] = name end
+		end
+		table.sort(off)
+		Print(("Addons off in your %s setup on this character: %s"):format(MODES[db.mode],
+			#off > 0 and table.concat(off, ", ") or "none"))
+	elseif cmd == "findsetting" then
+		FindSetting()
 	elseif cmd == "savedisplay" then
 		local d = CaptureDisplay()
 		db.profiles[db.mode].display = d

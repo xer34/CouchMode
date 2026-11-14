@@ -43,6 +43,8 @@ You can also bind a key or controller button under **Key Bindings → AddOns →
 | `/cm` | Switch setups (same as the button) |
 | `/cm desk`, `/cm handheld` | Switch to that setup |
 | `/cm status` | Show the current setup |
+| `/cm addons` | List which addons the current setup has turned off |
+| `/cm findsetting` | Run it, flip any game setting (for example the controller UI checkbox), run it again. CouchMode then remembers that setting per setup |
 | `/cm savedisplay` | Save the current display mode and resolution for this setup |
 | `/cm relabel desk\|handheld` | Name your current setup without changing anything |
 | `/cm track <Addon> <SavedVar ...>` | Also swap an addon's account-wide settings |
