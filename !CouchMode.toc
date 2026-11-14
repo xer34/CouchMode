@@ -1,7 +1,7 @@
 ## Interface: 16001, 120105, 120107
 ## Title: CouchMode
 ## Notes: Remembers your Desk and Handheld UI setups and swaps between them with one button.
-## Version: 1.0.0
+## Version: 1.0.1
 ## SavedVariables: CouchModeDB
 ## SavedVariablesPerCharacter: CouchModeCharDB
 

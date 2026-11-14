@@ -452,10 +452,12 @@ events:SetScript("OnEvent", function(_, event, arg1, arg2)
 
 	elseif event == "PLAYER_ENTERING_WORLD" and (arg1 or arg2) then -- login or reload
 		if db.verifyDisplay then C_Timer.After(3, VerifyDisplay) end
-		-- Take the display baseline at login, before you've had a chance to connect
-		-- through Parsec and switch, rather than at the moment you switch away.
+		-- Desk: take the display baseline at login, before you've had a chance to
+		-- connect through Parsec and switch, rather than at the moment you switch away.
+		-- Handheld is different: on your first visit you haven't set it up yet, so its
+		-- display is saved when you first switch away from it (see SwitchTo).
 		local profile = db.profiles[db.mode]
-		if not profile.display then
+		if db.mode == "desk" and not profile.display then
 			profile.display = CaptureDisplay()
 			Print(("Saved your %s display: %s."):format(MODES[db.mode], DisplayToString(profile.display)))
 			Print("If you're streaming right now, type /cm savedisplay next time you're at your desk.")

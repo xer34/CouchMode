@@ -58,6 +58,7 @@ For each tracked addon, CouchMode records which setup the settings file on disk 
 
 ## Notes
 
-- **Display:** each setup's display is saved once, at the first login after install, and then only when you run `/cm savedisplay`. That way a resolution Parsec sets when you connect is never saved as your Desk display. If a display restore doesn't take, CouchMode says so in chat.
+- **Display:** each setup's display is saved once. Desk's is saved at your first login after install, before you've connected through Parsec. Handheld's is saved the first time you switch away from it, after you've set it up. After that, a display only changes when you run `/cm savedisplay`, so a resolution Parsec sets when you connect is never saved as your Desk display. If a display restore doesn't take, CouchMode says so in chat.
+- **Windowed fullscreen:** in this mode the window always fills the monitor, so CouchMode restores the display mode and monitor but not the window size. If Parsec changes your PC's screen resolution, that change belongs to Parsec, not to CouchMode.
 - **Before you start:** back up your `WTF` folder before first use, as you would before trying any addon that touches saved variables.
 - **Alts:** if you switch setups on one character and then log in to an alt, CouchMode offers to bring that alt's layout and addons in line.
